@@ -1,16 +1,16 @@
 import * as puppeteer from "puppeteer";
-import * as algoserve from "./algoserve/index.js"; // Correct import path for your index.js
+import * as algoserve from "./algoserve/index.js";
 
 async function getBrowser() {
     return puppeteer.connect({
-        browserURL: 'http://localhost:9222', // Ensure this matches the remote debugging port
+        browserURL: 'http://localhost:9222',
         defaultViewport: null,
     });
 }
 
 async function run() {
     const browser = await getBrowser();
-    const op = process.argv[2]; // This captures the command line argument (e.g., "submit", "listen", "extract")
+    const op = process.argv[2];
 
     switch (op) {
         case "submit":
@@ -21,11 +21,11 @@ async function run() {
             console.log("Operation: Listen");
             await algoserve.listen(browser);
             break;
-        case "extract": // <--- NEW CASE ADDED HERE
+        case "extract":
             console.log("Operation: Extract Question");
-            const page = await algoserve.findLeetcodePage(browser); // Find the LeetCode page first
+            const page = await algoserve.findLeetcodePage(browser);
             if (page) {
-                await algoserve.extractQuestion(page); // Call the extractQuestion function
+                await algoserve.extractQuestion(page);
             } else {
                 console.error("Could not find a LeetCode problem page to extract from.");
                 process.exit(1);

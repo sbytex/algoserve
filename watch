@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
 
-# Exit immediately if a command exits with a non-zero status.
 set -e
-# Treat unset variables as an error.
 set -u
-# The return value of a pipeline is the status of the last command to exit with a non-zero status,
-# or zero if all commands exit successfully.
 set -o pipefail
 
-# --- Configuration ---
-# Set to "1" for a dry run (commands will be logged but not executed)
 DRY_RUN="0"
 
-# Parse command line arguments for --dry
 while [[ $# -gt 0 ]]; do
     if [[ "$1" == "--dry" ]]; then
         DRY_RUN="1"
@@ -20,9 +13,6 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# --- Logging and Execution Functions ---
-
-# Function to log messages with a timestamp and handle dry run mode
 log() {
     local level="INFO"
     local message="$1"
@@ -48,18 +38,15 @@ execute() {
     fi
 }
 
-# Function to get the question title from tempq.md
 get_question_title() {
     if [[ -f "tempq.md" ]]; then
-        # Use awk to find the first line starting with '# ' and remove '# '
-        # Also remove carriage return for cross-platform compatibility
         awk '/^# /{print substr($0, 3); exit}' tempq.md | tr -d '\r'
     else
         echo "Untitled"
     fi
 }
 
-# --- Main Script Logic ---
+#  Main Script Logic 
 
 round=0
 while true; do
@@ -96,7 +83,6 @@ while true; do
             continue
         fi
 
-        # Variable to track if prac.js was processed, for later cleanup
         PRAC_JS_PROCESSED=0
 
         # Append solution from prac.js to tempq.md if it exists
@@ -104,60 +90,55 @@ while true; do
             log "INFO" "Appending solution from prac.js to tempq.md"
             # Use a temporary file for safe appending
             TEMP_QINFO=$(mktemp)
-            execute cp "tempq.md" "$TEMP_QINFO" # Copy original content
-            echo -e "\n\`\`\`javascript" >> "$TEMP_QINFO" # Add markdown code block
+            execute cp "tempq.md" "$TEMP_QINFO" 
+            echo -e "\n\`\`\`javascript" >> "$TEMP_QINFO" 
             execute cat prac.js >> "$TEMP_QINFO"
-            echo -e "\n\`\`\`" >> "$TEMP_QINFO" # Close markdown code block
-            execute mv "$TEMP_QINFO" "tempq.md" # Replace original with updated temp file
+            echo -e "\n\`\`\`" >> "$TEMP_QINFO" 
+            execute mv "$TEMP_QINFO" "tempq.md" 
             PRAC_JS_PROCESSED=1
         else
             log "WARN" "prac.js not found. Skipping solution append."
         fi
 
-        # Get the question title and rename tempq.md
+
         QUESTION_TITLE=$(get_question_title)
         if [[ "$QUESTION_TITLE" != "Untitled" ]]; then
-            # Sanitize the title for filename (replace spaces with hyphens, remove special chars)
             SANITIZED_TITLE=$(echo "$QUESTION_TITLE" | iconv -t ascii//TRANSLIT | sed 's/[^a-zA-Z0-9 ]//g' | sed 's/ /-/g' | tr '[:upper:]' '[:lower:]')
             NEW_FILENAME="${SANITIZED_TITLE}.md"
-            FINAL_PATH="chest/$NEW_FILENAME" # Define the final path inside the 'chest' directory
+            FINAL_PATH="chest/$NEW_FILENAME" 
 
-            # Create 'chest' directory if it doesn't exist
+
             if [[ ! -d "chest" ]]; then
                 log "INFO" "Creating directory: chest"
                 execute mkdir -p "chest"
             fi
 
-            # Check if the target file already exists in the 'chest' directory.
             if [[ -f "$FINAL_PATH" ]]; then
                 log "WARN" "Target file '$FINAL_PATH' already exists. Skipping rename and move to avoid overwrite."
             else
-                # Rename tempq.md
                 execute mv "tempq.md" "$NEW_FILENAME"
                 log "INFO" "Renamed tempq.md to $NEW_FILENAME"
 
-                # Move the renamed file into the 'chest' directory
                 execute mv "$NEW_FILENAME" "$FINAL_PATH"
                 log "INFO" "Moved $NEW_FILENAME to $FINAL_PATH"
 
                 # --- Git commands (uncomment to enable) ---
-                # log "INFO" "Adding to Git and pushing..."
-                # execute git add "$FINAL_PATH" # Add the file at its new, final location
-                # if git diff --cached --exit-code --quiet; then
-                #     log "INFO" "No changes to commit for '$FINAL_PATH'."
-                # else
-                #     execute git commit -m "Add LeetCode solution: $QUESTION_TITLE"
-                #     execute git push origin main # Or your default branch (e.g., 'master')
-                # fi
+                log "INFO" "Adding to Git and pushing..."
+                execute git add "$FINAL_PATH" 
+                if git diff --cached --exit-code --quiet; then
+                    log "INFO" "No changes to commit for '$FINAL_PATH'."
+                else
+                    execute git commit -m "Add LeetCode solution: $QUESTION_TITLE"
+                    execute git push origin main 
+                fi
             fi
         else
             log "WARN" "Could not get question title. tempq.md remains as is and will not be moved or committed."
         fi
 
-        # --- Cleanup ---
-        # Remove prac.js if it was initially found and processed.
+
         if [[ "$PRAC_JS_PROCESSED" -eq 1 ]]; then
-            if [[ -f "prac.js" ]]; then # Double check before removing
+            if [[ -f "prac.js" ]]; then  
                 log "INFO" "Removing prac.js"
                 # execute rm "prac.js"
             fi
@@ -165,10 +146,10 @@ while true; do
 
         log "INFO" "File processing finished for this round."
 
-    else # This block runs if ./algoserve.js listen failed (e.g., Wrong Answer, Runtime Error)
+    else 
         log "ERROR" "You have failed me for the last time."
         log "INFO" "Goodbye."
-        exit 1 # Exit the script on failure
+        exit 1 
     fi
 done
 

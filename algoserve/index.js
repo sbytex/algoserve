@@ -20,15 +20,11 @@ export async function findLeetcodePage(browser) {
 }
 
 /**
- * Extract LeetCode question content and save to tempq.md
- * Always creates a file, even if extraction fails
- * @param {puppeteer.Page} page - The LeetCode problem page
+ * @param {puppeteer.Page} page -  LeetCode problem page
  * @returns {Promise<boolean>} - Success status
  */
 export async function extractQuestion(page) {
     const url = page.url();
-    console.log("=== STARTING QUESTION EXTRACTION ===");
-    console.log("URL:", url);
 
     let questionData = {
         title: "Unknown Problem",
@@ -37,11 +33,9 @@ export async function extractQuestion(page) {
     };
 
     try {
-        console.log("Attempting to extract question data...");
 
         // Extract the problem details using page.evaluate with current selectors
         const extractedData = await page.evaluate(() => {
-            console.log("=== RUNNING IN BROWSER CONTEXT ==="); // This appears in your terminal
 
             let title = "Unknown Problem";
             let difficulty = "Unknown Difficulty";
@@ -52,7 +46,6 @@ export async function extractQuestion(page) {
             let descriptionFound = false;
 
             // --- Title Extraction ---
-            // Prioritize title from a link if available
             let titleElement = document.querySelector('a.text-title-large, h3.text-title-large, div.text-title-large'); // Added h3 as a common heading tag
             if (titleElement) {
                 title = titleElement.textContent.trim();
@@ -73,14 +66,9 @@ export async function extractQuestion(page) {
             }
 
             // --- Description Extraction ---
-            // LeetCode problem description container often has a specific data-track-load attribute
-            // or a unique class. Avoid generic classes like 'elfjS' as they change frequently.
             const descriptionContainer = document.querySelector('div[data-track-load="description_content"]');
 
             if (descriptionContainer) {
-                // Get all text content within the description container, joining paragraph breaks nicely.
-                // Using innerHTML and then converting to markdown might be more robust for formatting
-                // but innerText should capture most of it.
                 descriptionText = descriptionContainer.innerText
                     .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines to two
                     .trim();
@@ -88,8 +76,7 @@ export async function extractQuestion(page) {
                 console.log("Found description with data-track-load, length:", descriptionText.length);
             } else {
                 console.log("Description container with data-track-load not found.");
-                // Fallback for description - look for the main content area that contains the question
-                // This is a more generic fallback and might need adjustment.
+
                 const fallbackDescription = document.querySelector('div.leet-code-problem-content div[class*="content"]'); // More generic, but might be too broad
                 if (fallbackDescription) {
                     descriptionText = fallbackDescription.innerText
@@ -120,26 +107,16 @@ export async function extractQuestion(page) {
             descriptionText: extractedData.descriptionText
         };
 
-        // console.log("=== EXTRACTION RESULTS (OUTSIDE BROWSER CONTEXT) ===");
-        // console.log("Title found:", extractedData.titleFound);
-        // console.log("Difficulty found:", extractedData.difficultyFound);
-        // console.log("Description found:", extractedData.descriptionFound);
-        // console.log("Final title:", questionData.title);
-        // console.log("Final difficulty:", questionData.difficulty);
-        // console.log("Description length:", questionData.descriptionText.length);
-        if (questionData.descriptionText.length < 50) { // Warn if description is very short
+        if (questionData.descriptionText.length < 50) {
             console.warn("WARNING: Description extracted is very short. It might be incomplete.");
         }
 
 
     } catch (error) {
-        console.error("=== ERROR DURING EXTRACTION (OUTSIDE BROWSER CONTEXT) ===");
         console.error("Error details:", error);
-        // questionData already has default values, so we'll proceed with those
     }
 
     try {
-        // Always create the file, even if extraction failed
         const markdownContent = `# ${questionData.title}
 ## Difficulty: ${questionData.difficulty}
 ## URL: ${url}
@@ -150,7 +127,6 @@ ${questionData.descriptionText}
 ---
 ## *Code Solution*
 `;
-
 
         await fs.writeFile('tempq.md', markdownContent, 'utf8');
 
