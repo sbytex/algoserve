@@ -18,57 +18,172 @@ export async function findLeetcodePage(browser) {
 
     throw new Error("couldn't find page")
 }
+
 /**
- * @param {puppeteer.Page} page 
+ * Extract LeetCode question content and save to tempq.md
+ * Always creates a file, even if extraction fails
+ * @param {puppeteer.Page} page - The LeetCode problem page
  * @returns {Promise<boolean>} - Success status
  */
-
 export async function extractQuestion(page) {
+    const url = page.url();
+    console.log("=== STARTING QUESTION EXTRACTION ===");
+    console.log("URL:", url);
+
+    let questionData = {
+        title: "Unknown Problem",
+        difficulty: "Unknown Difficulty",
+        descriptionText: "No description available"
+    };
+
     try {
-        const url = page.url();
-        console.log("Extracting question from:", url);
+        console.log("Attempting to extract question data...");
 
-        // Extract the problem details using page.evaluate
-        const questionData = await page.evaluate(() => {
-            // Get problem title
-            const titleElement = document.querySelector('[data-cy="question-title"]');
-            const title = titleElement ? titleElement.textContent.trim() : "Unknown Problem";
+        // Extract the problem details using page.evaluate with current selectors
+        const extractedData = await page.evaluate(() => {
+            console.log("=== RUNNING IN BROWSER CONTEXT ==="); // This appears in your terminal
 
-            // Get problem difficulty
-            const difficultyElement = document.querySelector('[data-cy="question-difficulty"]');
-            const difficulty = difficultyElement ? difficultyElement.textContent.trim() : "Unknown Difficulty";
+            let title = "Unknown Problem";
+            let difficulty = "Unknown Difficulty";
+            let descriptionText = "No description available";
 
-            // Get problem description
-            const descriptionElement = document.querySelector('[data-cy="question-content"]');
-            const descriptionText = descriptionElement ?
-                descriptionElement.innerText.replace(/\n{3,}/g, '\n\n') : "No description available";
+            let titleFound = false;
+            let difficultyFound = false;
+            let descriptionFound = false;
+
+            // --- Title Extraction ---
+            // Prioritize title from a link if available
+            let titleElement = document.querySelector('a.text-title-large, h3.text-title-large, div.text-title-large'); // Added h3 as a common heading tag
+            if (titleElement) {
+                title = titleElement.textContent.trim();
+                titleFound = true;
+                console.log("Found title with selector:", titleElement.tagName, title);
+            } else {
+                console.log("Title element not found with current selectors.");
+            }
+
+            // --- Difficulty Extraction ---
+            const difficultyElement = document.querySelector('.text-difficulty-medium, .text-difficulty-easy, .text-difficulty-hard');
+            if (difficultyElement && difficultyElement.textContent.trim()) {
+                difficulty = difficultyElement.textContent.trim();
+                difficultyFound = true;
+                console.log("Found difficulty:", difficulty);
+            } else {
+                console.log("Difficulty selector failed.");
+            }
+
+            // --- Description Extraction ---
+            // LeetCode problem description container often has a specific data-track-load attribute
+            // or a unique class. Avoid generic classes like 'elfjS' as they change frequently.
+            const descriptionContainer = document.querySelector('div[data-track-load="description_content"]');
+
+            if (descriptionContainer) {
+                // Get all text content within the description container, joining paragraph breaks nicely.
+                // Using innerHTML and then converting to markdown might be more robust for formatting
+                // but innerText should capture most of it.
+                descriptionText = descriptionContainer.innerText
+                    .replace(/\n{3,}/g, '\n\n') // Normalize multiple newlines to two
+                    .trim();
+                descriptionFound = true;
+                console.log("Found description with data-track-load, length:", descriptionText.length);
+            } else {
+                console.log("Description container with data-track-load not found.");
+                // Fallback for description - look for the main content area that contains the question
+                // This is a more generic fallback and might need adjustment.
+                const fallbackDescription = document.querySelector('div.leet-code-problem-content div[class*="content"]'); // More generic, but might be too broad
+                if (fallbackDescription) {
+                    descriptionText = fallbackDescription.innerText
+                        .replace(/\n{3,}/g, '\n\n')
+                        .trim();
+                    descriptionFound = true;
+                    console.log("Found description with generic fallback, length:", descriptionText.length);
+                } else {
+                    console.log("All description selectors failed.");
+                }
+            }
+
 
             return {
                 title,
                 difficulty,
-                descriptionText
+                descriptionText,
+                titleFound,
+                difficultyFound,
+                descriptionFound
             };
         });
 
-        // Format content for markdown file
+        // Update questionData with extracted data
+        questionData = {
+            title: extractedData.title,
+            difficulty: extractedData.difficulty,
+            descriptionText: extractedData.descriptionText
+        };
+
+        // console.log("=== EXTRACTION RESULTS (OUTSIDE BROWSER CONTEXT) ===");
+        // console.log("Title found:", extractedData.titleFound);
+        // console.log("Difficulty found:", extractedData.difficultyFound);
+        // console.log("Description found:", extractedData.descriptionFound);
+        // console.log("Final title:", questionData.title);
+        // console.log("Final difficulty:", questionData.difficulty);
+        // console.log("Description length:", questionData.descriptionText.length);
+        if (questionData.descriptionText.length < 50) { // Warn if description is very short
+            console.warn("WARNING: Description extracted is very short. It might be incomplete.");
+        }
+
+
+    } catch (error) {
+        console.error("=== ERROR DURING EXTRACTION (OUTSIDE BROWSER CONTEXT) ===");
+        console.error("Error details:", error);
+        // questionData already has default values, so we'll proceed with those
+    }
+
+    try {
+        // Always create the file, even if extraction failed
         const markdownContent = `# ${questionData.title}
 ## Difficulty: ${questionData.difficulty}
 ## URL: ${url}
+## Extraction Time: ${new Date().toISOString()}
 
 ${questionData.descriptionText}
+
+---
+## *Code Solution*
 `;
 
-        // Save to tempq.md
-        await fs.writeFile('qInfo.md', markdownContent, 'utf8');
-        console.log("Successfully saved problem details to qInfo.md");
+
+        await fs.writeFile('tempq.md', markdownContent, 'utf8');
+
+        // Verify file was created
+        try {
+            const stats = await fs.stat('tempq.md');
+            console.log("File size:", stats.size, "bytes");
+        } catch (statError) {
+            console.error(" Could not verify file creation:", statError);
+        }
 
         return true;
-    } catch (error) {
-        console.error("Error extracting question:", error);
+    } catch (writeError) {
+        console.error("Write error:", writeError);
+
+        // Try to create a minimal dummy file
+        try {
+            const dummyContent = `# LeetCode Problem
+## URL: ${url}
+## Status: Extraction Failed
+## Time: ${new Date().toISOString()}
+
+Could not extract problem details. Please check the selectors or page structure.
+
+Error: ${writeError.message}
+`;
+            await fs.writeFile('tempq.md', dummyContent, 'utf8');
+        } catch (dummyError) {
+        }
+
         return false;
     }
 }
-
 
 /**
  * @typedef {{
@@ -150,7 +265,8 @@ export async function listen(browser) {
             const response = await submission(page, id);
 
             console.log(response.status_msg)
-            if (response.status_msg === "Wrong Answer" || response.status_msg === "Runtime Error") {
+            // FIX: Add 'Compile Error' to the conditions that trigger process.exit(1)
+            if (response.status_msg === "Wrong Answer" || response.status_msg === "Runtime Error" || response.status_msg === "Compile Error") {
                 process.exit(1)
             }
             console.log(response)
@@ -186,4 +302,5 @@ export async function submit(browser) {
     }
     process.exit(0)
 }
+
 
