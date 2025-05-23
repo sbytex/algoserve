@@ -1,4 +1,4 @@
-# Algoserve – We keep your solutions safe, just in case you forget them... again.
+# Algoserve – keep your solutions safe, just in case you forget them... again.
 
 This project automates your LeetCode problem-solving flow by listening for submission results, extracting problem details, appending your solution, and organizing files. 
 ## Key Features
